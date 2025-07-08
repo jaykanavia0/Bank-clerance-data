@@ -1,0 +1,10 @@
+flask-cors
+matplotlib
+seaborn
+python-dotenv
+flask
+pandas
+numpy
+scikit-learn
+openpyxl
+gunicorn

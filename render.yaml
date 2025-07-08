@@ -1,0 +1,28 @@
+services:
+  # Backend API service
+  - type: web
+    name: contact-routing-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_APP
+        value: app.py
+    healthCheckPath: /api/health
+    plan: free
+
+  # Frontend web service
+  - type: web
+    name: contact-routing-frontend
+    env: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: contact-routing-backend
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+    plan: free
