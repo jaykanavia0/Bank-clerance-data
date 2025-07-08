@@ -7,17 +7,17 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 
-# Configure app
-app = Flask(__name__)
+# Configure app - Modified for single service deployment
+app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
 
-# CORS configuration for production
+# CORS configuration - Updated for single service
 CORS(app, 
      origins=[
-         'https://bankclearancee.onrender.com',  # Your frontend URL
+         'https://your-app-name.onrender.com',  # Update with your actual Render URL
          'http://localhost:3000', 
          'http://localhost:5173'
      ],
-     supports_credentials=False)  # Changed to False to avoid credentials issues
+     supports_credentials=False)
 
 # Configure logging
 if not os.path.exists('logs'):
@@ -31,6 +31,7 @@ file_handler.setLevel(logging.INFO)
 app.logger.addHandler(file_handler)
 app.logger.setLevel(logging.INFO)
 app.logger.info('Contact Routing System startup')
+
 
 # Global variables for model and data
 routing_model = None
@@ -701,15 +702,22 @@ def get_sebi_states():
 # STATIC FILE SERVING (for React app)
 # ============================================================================
 
-# Serve the React app
-@app.route('/', defaults={'path': ''})
+@app.route('/')
+def serve_react():
+    return send_from_directory(app.static_folder, 'index.html')
+
 @app.route('/<path:path>')
-def serve(path):
+def serve_static(path):
+    # First check if it's an API route
+    if path.startswith('api/'):
+        return jsonify({'error': 'API endpoint not found'}), 404
+    
+    # Check if the file exists in the static folder
     if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     else:
+        # For client-side routing, serve index.html
         return send_from_directory(app.static_folder, 'index.html')
-
 # ============================================================================
 # ERROR HANDLERS
 # ============================================================================

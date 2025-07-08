@@ -190,27 +190,7 @@ const MobileDropdownItem = memo(({ to, label, Icon, onClick }) => (
   </Link>
 ));
 
-const SearchBar = memo(({ isScrolled }) => (
-  <div className={`hidden lg:flex items-center gap-2 px-4 py-2 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] ${
-    isScrolled 
-      ? 'bg-slate-100 border border-slate-200 hover:shadow-md' 
-      : 'bg-white/20 backdrop-blur-md border border-white/30 hover:bg-white/25'
-  }`}>
-    <Search size={16} className={`transition-colors duration-300 ${isScrolled ? 'text-slate-500' : 'text-white/70'}`} />
-    <input
-      type="text"
-      placeholder="Search anything..."
-      className={`bg-transparent outline-none text-sm font-medium placeholder:font-normal w-32 xl:w-48 transition-colors duration-300 ${
-        isScrolled ? 'text-slate-700 placeholder:text-slate-400' : 'text-white placeholder:text-white/60'
-      }`}
-    />
-    <div className={`px-2 py-1 rounded-lg text-xs font-medium transition-all duration-300 hover:scale-110 ${
-      isScrolled ? 'bg-slate-200 text-slate-600' : 'bg-white/20 text-white/80'
-    }`}>
-      ⌘K
-    </div>
-  </div>
-));
+
 
 const UserAvatar = memo(({ isScrolled }) => (
   <div className="relative">
@@ -450,7 +430,6 @@ const Header = ({ notificationService }) => {
           {/* Enhanced Right Section */}
           <div className="flex items-center gap-2 md:gap-3">
             {/* Search Bar */}
-            <SearchBar isScrolled={isScrolled} />
             
             {/* Notifications */}
             <div className="hidden sm:block">
