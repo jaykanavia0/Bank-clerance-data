@@ -12,10 +12,10 @@ cd ..
 # Install Python dependencies
 echo "Installing Python dependencies..."
 # If requirements.txt is in root directory:
-pip install -r requirements.txt
+#pip install -r requirements.txt
 
 # If requirements.txt is in backend directory, use this instead:
-# pip install -r backend/requirements.txt
+pip install -r backend/requirements.txt
 
 echo "Build complete!"
 echo "React build created in frontend/build/"
