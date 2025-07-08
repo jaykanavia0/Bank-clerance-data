@@ -1,3 +1,4 @@
+# At the top of your backend/app.py file
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import pandas as pd
@@ -7,15 +8,15 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 
-# Configure app - Modified for single service deployment
+# Configure app - Point to frontend build folder
 app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
 
-# CORS configuration - Updated for single service
-CORS(app, 
+# CORS configuration - Update with your Render URL
+CORS(app,
      origins=[
-         'https://your-app-name.onrender.com',  # Update with your actual Render URL
-         'http://localhost:3000', 
-         'http://localhost:5173'
+         'https://your-app-name.onrender.com',  # Update this with your actual Render URL
+         'http://localhost:3000',               # For local React development
+         'http://localhost:5173'                # For Vite development server
      ],
      supports_credentials=False)
 
@@ -23,7 +24,8 @@ CORS(app,
 if not os.path.exists('logs'):
     os.mkdir('logs')
 
-file_handler = RotatingFileHandler('logs/app.log', maxBytes=10240, backupCount=10)
+file_handler = RotatingFileHandler(
+    'logs/app.log', maxBytes=10240, backupCount=10)
 file_handler.setFormatter(logging.Formatter(
     '%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s'
 ))
@@ -42,14 +44,14 @@ routing_features = None
 sebi_data = None
 
 # Issue categories and severity levels for banks
-issue_categories = ['Account_Access', 'Transaction_Failure', 'Technical_Error', 
-                   'Fraud_Alert', 'Customer_Service', 'Data_Sync']
+issue_categories = ['Account_Access', 'Transaction_Failure', 'Technical_Error',
+                    'Fraud_Alert', 'Customer_Service', 'Data_Sync']
 
 severity_levels = ['Low', 'Medium', 'High', 'Critical']
 
 # SEBI issue categories
-sebi_categories = ['Investment_Advisory', 'Portfolio_Management', 'Research_Analysis', 
-                  'Compliance_Issues', 'Client_Grievances', 'Regulatory_Matters']
+sebi_categories = ['Investment_Advisory', 'Portfolio_Management', 'Research_Analysis',
+                   'Compliance_Issues', 'Client_Grievances', 'Regulatory_Matters']
 
 # Escalation level mapping for banks
 escalation_mapping = {
@@ -63,131 +65,138 @@ escalation_mapping = {
 
 # Numerical columns for scaling
 numerical_cols = ['Time_Sensitivity', 'Complete_Levels_Count', 'Generic_Email_Count',
-                 'Corporate_Email_Count', 'Personal_Email_Count',
-                 'Email_Completeness', 'Phone_Completeness']
+                  'Corporate_Email_Count', 'Personal_Email_Count',
+                  'Email_Completeness', 'Phone_Completeness']
+
 
 def load_bank_data():
     """Load bank model and data"""
     global routing_model, scaler, feature_columns, df_clean, routing_features
-    
+
     try:
         app.logger.info("Loading bank model and data...")
-        
+
         # Check if files exist before loading
         model_files = [
             'models/routing_model.pkl',
-            'models/feature_scaler.pkl', 
+            'models/feature_scaler.pkl',
             'models/feature_columns.pkl',
             'data/df_clean.pkl',
             'data/routing_features.pkl'
         ]
-        
+
         missing_files = [f for f in model_files if not os.path.exists(f)]
         if missing_files:
             app.logger.warning(f"Missing bank data files: {missing_files}")
             return False
-        
+
         # Load the model
         with open('models/routing_model.pkl', 'rb') as file:
             routing_model = pickle.load(file)
-        
+
         # Load the scaler
         with open('models/feature_scaler.pkl', 'rb') as file:
             scaler = pickle.load(file)
-        
+
         # Load feature columns
         with open('models/feature_columns.pkl', 'rb') as file:
             feature_columns = pickle.load(file)
-        
+
         # Load the cleaned data
         df_clean = pd.read_pickle('data/df_clean.pkl')
         routing_features = pd.read_pickle('data/routing_features.pkl')
-        
+
         app.logger.info("Bank model and data loaded successfully")
         return True
-        
+
     except Exception as e:
         app.logger.error(f"Error loading bank model and data: {str(e)}")
         return False
 
+
 def load_sebi_data():
     """Load and process SEBI data"""
     global sebi_data
-    
+
     try:
         app.logger.info("Loading SEBI data...")
-        
+
         # Check if SEBI data file exists
         sebi_file = 'data/SEBI_DATA.xlsx'
         if not os.path.exists(sebi_file):
             # Try alternative paths
-            alt_paths = ['SEBI_DATA.xlsx', 'SEBI DATA.xlsx', 'data/SEBI DATA.xlsx']
+            alt_paths = ['SEBI_DATA.xlsx',
+                         'SEBI DATA.xlsx', 'data/SEBI DATA.xlsx']
             sebi_file = None
             for path in alt_paths:
                 if os.path.exists(path):
                     sebi_file = path
                     break
-            
+
             if not sebi_file:
                 app.logger.warning("SEBI data file not found")
                 return False
-        
+
         # Read the Excel file
         df = pd.read_excel(sebi_file, sheet_name=0, header=1)
-        
+
         # Clean column names - handle the actual column structure
         expected_cols = 20  # Based on your data analysis
         if len(df.columns) >= expected_cols:
-            df.columns = ['Name', 'Registration_No', 'Contact_Person', 
-                         'Address_1', 'Email_1', 'Telephone_1', 'Fax_1', 
-                         'City_1', 'State_1', 'Pincode_1',
-                         'Address_2', 'Email_2', 'Telephone_2', 'Fax_2',
-                         'City_2', 'State_2', 'Pincode_2',
-                         'From_Date', 'To_Date', 'Country']
+            df.columns = ['Name', 'Registration_No', 'Contact_Person',
+                          'Address_1', 'Email_1', 'Telephone_1', 'Fax_1',
+                          'City_1', 'State_1', 'Pincode_1',
+                          'Address_2', 'Email_2', 'Telephone_2', 'Fax_2',
+                          'City_2', 'State_2', 'Pincode_2',
+                          'From_Date', 'To_Date', 'Country']
         else:
             # Fallback: use first few columns with generic names
-            app.logger.warning(f"Unexpected number of columns: {len(df.columns)}")
+            app.logger.warning(
+                f"Unexpected number of columns: {len(df.columns)}")
             df.columns = [f'Col_{i}' for i in range(len(df.columns))]
             # Map to expected names for first few columns
             col_mapping = {
                 'Col_0': 'Name',
-                'Col_1': 'Registration_No', 
+                'Col_1': 'Registration_No',
                 'Col_2': 'Contact_Person',
                 'Col_3': 'Address_1',
                 'Col_4': 'Email_1',
                 'Col_5': 'Telephone_1'
             }
             df = df.rename(columns=col_mapping)
-        
+
         # Add ID column
         df['SEBI_ID'] = range(1, len(df) + 1)
-        
+
         # Clean data
         df = df.fillna('')
-        
+
         # Remove rows where Name is empty
         df = df[df['Name'].astype(str).str.strip() != '']
-        
+
         # Remove header rows that might have been included
-        df = df[~df['Name'].astype(str).str.contains('Registered Portfolio Managers', na=False)]
-        
+        df = df[~df['Name'].astype(str).str.contains(
+            'Registered Portfolio Managers', na=False)]
+
         sebi_data = df
         app.logger.info(f"Loaded {len(df)} SEBI Portfolio Managers")
         return True
-        
+
     except Exception as e:
         app.logger.error(f"Error loading SEBI data: {str(e)}")
         return False
 
 # Load data before first request
+
+
 @app.before_request
 def load_all_data():
     global routing_model, scaler, feature_columns, df_clean, routing_features, sebi_data
-    
+
     # Load bank data if not already loaded
     if routing_model is None:
         load_bank_data()
-    
+
     # Load SEBI data if not already loaded
     if sebi_data is None:
         load_sebi_data()
@@ -195,6 +204,7 @@ def load_all_data():
 # ============================================================================
 # GENERAL API ENDPOINTS
 # ============================================================================
+
 
 @app.route('/api/test', methods=['GET'])
 def test():
@@ -213,6 +223,7 @@ def test():
 # BANK API ENDPOINTS (Original functionality)
 # ============================================================================
 
+
 @app.route('/api/banks', methods=['GET'])
 def get_banks():
     """Get list of banks"""
@@ -222,8 +233,9 @@ def get_banks():
                 'success': False,
                 'error': 'Bank data not loaded. Please check data files.'
             }), 500
-            
-        banks = routing_features[['Bank_ID', 'Bank_Name']].drop_duplicates().sort_values('Bank_Name')
+
+        banks = routing_features[['Bank_ID', 'Bank_Name']
+                                 ].drop_duplicates().sort_values('Bank_Name')
         return jsonify({
             'success': True,
             'banks': banks.to_dict('records')
@@ -235,11 +247,13 @@ def get_banks():
             'error': str(e)
         }), 500
 
+
 @app.route('/api/categories', methods=['GET'])
 def get_categories():
     """Get list of issue categories"""
     try:
-        categories = [{'id': cat, 'name': cat.replace('_', ' ')} for cat in issue_categories]
+        categories = [{'id': cat, 'name': cat.replace(
+            '_', ' ')} for cat in issue_categories]
         return jsonify({
             'success': True,
             'categories': categories
@@ -250,6 +264,7 @@ def get_categories():
             'success': False,
             'error': str(e)
         }), 500
+
 
 @app.route('/api/severities', methods=['GET'])
 def get_severities():
@@ -267,6 +282,7 @@ def get_severities():
             'error': str(e)
         }), 500
 
+
 @app.route('/api/route_issue', methods=['POST'])
 def route_issue():
     """Route an issue to the appropriate contact based on rule-based logic"""
@@ -274,12 +290,12 @@ def route_issue():
         # Log the received request
         data = request.json
         app.logger.info(f"Received routing request: {data}")
-        
+
         # Get form data
         bank_id = int(data.get('bank_id'))
         issue_category = data.get('issue_category')
         severity = data.get('severity')
-        
+
         # Load data if not already loaded
         global df_clean
         if df_clean is None:
@@ -288,7 +304,7 @@ def route_issue():
                     'success': False,
                     'error': "Could not load bank data"
                 }), 500
-        
+
         # Get the bank data
         bank_data_rows = df_clean[df_clean['Sl No'] == bank_id]
         if len(bank_data_rows) == 0:
@@ -296,9 +312,9 @@ def route_issue():
                 'success': False,
                 'error': f"No contact data found for bank ID {bank_id}"
             }), 404
-        
+
         bank_data = bank_data_rows.iloc[0]
-        
+
         # Rule-based routing logic (same as in the training model)
         if issue_category in ['Technical_Error', 'Data_Sync']:
             if severity in ['High', 'Critical']:
@@ -316,7 +332,7 @@ def route_issue():
             level_name = 'Level_2'
         else:  # Low or Medium
             level_name = 'Level_1'
-            
+
         # Determine contact info based on level
         try:
             if level_name == 'Level_1':
@@ -343,12 +359,15 @@ def route_issue():
                 contact_name = bank_data['Official Name (Head or GM)']
                 contact_phone = bank_data['Mobile Number6']
                 contact_email = bank_data['Mail Id6']
-                
+
             # Handle missing values
-            contact_name = str(contact_name) if not pd.isna(contact_name) else "Not Available"
-            contact_phone = str(contact_phone) if not pd.isna(contact_phone) else "Not Available"
-            contact_email = str(contact_email) if not pd.isna(contact_email) else "Not Available"
-            
+            contact_name = str(contact_name) if not pd.isna(
+                contact_name) else "Not Available"
+            contact_phone = str(contact_phone) if not pd.isna(
+                contact_phone) else "Not Available"
+            contact_email = str(contact_email) if not pd.isna(
+                contact_email) else "Not Available"
+
             # Simulate a confidence level (can be fixed or based on severity)
             if severity == 'Critical':
                 confidence = 95.0
@@ -358,7 +377,7 @@ def route_issue():
                 confidence = 75.0
             else:
                 confidence = 65.0
-                
+
             return jsonify({
                 'success': True,
                 'result': {
@@ -370,14 +389,14 @@ def route_issue():
                     'confidence': confidence
                 }
             })
-            
+
         except Exception as e:
             app.logger.error(f"Error retrieving contact details: {str(e)}")
             return jsonify({
                 'success': False,
                 'error': f"Error retrieving contact details: {str(e)}"
             }), 500
-            
+
     except Exception as e:
         app.logger.error(f"Error in route_issue: {str(e)}")
         return jsonify({
@@ -385,12 +404,13 @@ def route_issue():
             'error': str(e)
         }), 500
 
+
 @app.route('/api/contacts', methods=['GET'])
 def get_contacts():
     """Get contacts filtered by position"""
     try:
         position = request.args.get('position', 'all')
-        
+
         # Load data if not already loaded
         global df_clean
         if df_clean is None:
@@ -399,7 +419,7 @@ def get_contacts():
                     'success': False,
                     'error': "Could not load bank data"
                 }), 500
-        
+
         # Create mapping of positions to column names
         position_mapping = {
             'gm_head': 'Official Name (Head or GM)',
@@ -409,14 +429,14 @@ def get_contacts():
             'tech_level1': 'Official Name from Technology (1st Level )',
             'tech_level2': 'Official Name from Technology (2nd Level )'
         }
-        
+
         # Default to all positions if invalid position provided
         if position not in position_mapping and position != 'all':
             position = 'all'
-            
+
         # Prepare response data
         contacts = []
-        
+
         # Filter by position or get all positions
         if position == 'all':
             # Get contacts from all positions
@@ -426,12 +446,12 @@ def get_contacts():
             # Get contacts for specified position
             column = position_mapping[position]
             contacts.extend(get_contacts_by_column(df_clean, column, position))
-            
+
         return jsonify({
             'success': True,
             'contacts': contacts
         })
-        
+
     except Exception as e:
         app.logger.error(f"Error retrieving contacts: {str(e)}")
         return jsonify({
@@ -439,10 +459,11 @@ def get_contacts():
             'error': str(e)
         }), 500
 
+
 def get_contacts_by_column(df, name_column, position_type):
     """Helper function to extract contacts by column name"""
     contacts = []
-    
+
     # Map columns to get corresponding email and phone
     email_column_map = {
         'Official Name (1st Level)': 'Mail Id',
@@ -452,7 +473,7 @@ def get_contacts_by_column(df, name_column, position_type):
         'Official Name from Technology (2nd Level )': 'Mail Id5',
         'Official Name (Head or GM)': 'Mail Id6'
     }
-    
+
     phone_column_map = {
         'Official Name (1st Level)': 'Mobile Number',
         'Official Name (2nd Level)': 'Mobile Number2',
@@ -461,10 +482,10 @@ def get_contacts_by_column(df, name_column, position_type):
         'Official Name from Technology (2nd Level )': 'Mobile Number5',
         'Official Name (Head or GM)': 'Mobile Number6'
     }
-    
+
     email_column = email_column_map.get(name_column)
     phone_column = phone_column_map.get(name_column)
-    
+
     # Get display name for the position type
     position_display = {
         'gm_head': 'GM/Head',
@@ -474,7 +495,7 @@ def get_contacts_by_column(df, name_column, position_type):
         'tech_level1': 'Technical Level 1',
         'tech_level2': 'Technical Level 2'
     }.get(position_type, position_type)
-    
+
     # Extract contacts
     for _, row in df.iterrows():
         if pd.notna(row[name_column]) and row[name_column] != '':
@@ -488,12 +509,13 @@ def get_contacts_by_column(df, name_column, position_type):
                 'phone': str(row[phone_column]) if pd.notna(row[phone_column]) else ''
             }
             contacts.append(contact)
-            
+
     return contacts
 
 # ============================================================================
 # SEBI API ENDPOINTS (New functionality)
 # ============================================================================
+
 
 @app.route('/api/sebi/entities', methods=['GET'])
 def get_sebi_entities():
@@ -505,37 +527,42 @@ def get_sebi_entities():
                     'success': False,
                     'error': 'SEBI data not loaded. Please check if SEBI_DATA.xlsx exists.'
                 }), 500
-        
+
         # Get query parameters
         search = request.args.get('search', '').lower()
         state = request.args.get('state', '')
         city = request.args.get('city', '')
-        
+
         # Filter data
         filtered_data = sebi_data.copy()
-        
+
         if search:
             # Handle case where columns might not exist
-            name_col = 'Name' if 'Name' in filtered_data.columns else filtered_data.columns[0]
-            reg_col = 'Registration_No' if 'Registration_No' in filtered_data.columns else filtered_data.columns[1]
-            
+            name_col = 'Name' if 'Name' in filtered_data.columns else filtered_data.columns[
+                0]
+            reg_col = 'Registration_No' if 'Registration_No' in filtered_data.columns else filtered_data.columns[
+                1]
+
             filtered_data = filtered_data[
                 filtered_data[name_col].astype(str).str.lower().str.contains(search, na=False) |
-                filtered_data[reg_col].astype(str).str.lower().str.contains(search, na=False)
+                filtered_data[reg_col].astype(
+                    str).str.lower().str.contains(search, na=False)
             ]
-        
+
         if state and 'State_1' in filtered_data.columns:
             filtered_data = filtered_data[
                 (filtered_data['State_1'].astype(str).str.upper() == state.upper()) |
-                (filtered_data.get('State_2', pd.Series()).astype(str).str.upper() == state.upper())
+                (filtered_data.get('State_2', pd.Series()).astype(
+                    str).str.upper() == state.upper())
             ]
-            
+
         if city and 'City_1' in filtered_data.columns:
             filtered_data = filtered_data[
                 (filtered_data['City_1'].astype(str).str.upper() == city.upper()) |
-                (filtered_data.get('City_2', pd.Series()).astype(str).str.upper() == city.upper())
+                (filtered_data.get('City_2', pd.Series()).astype(
+                    str).str.upper() == city.upper())
             ]
-        
+
         # Prepare response
         entities = []
         for _, row in filtered_data.iterrows():
@@ -565,13 +592,13 @@ def get_sebi_entities():
                 'to_date': str(row.get('To_Date', row.iloc[18] if len(row) > 18 else ''))
             }
             entities.append(entity)
-        
+
         return jsonify({
             'success': True,
             'entities': entities,
             'total': len(entities)
         })
-        
+
     except Exception as e:
         app.logger.error(f"Error retrieving SEBI entities: {str(e)}")
         return jsonify({
@@ -579,11 +606,13 @@ def get_sebi_entities():
             'error': str(e)
         }), 500
 
+
 @app.route('/api/sebi/categories', methods=['GET'])
 def get_sebi_categories():
     """Get SEBI issue categories"""
     try:
-        categories = [{'id': cat.replace(' ', '_'), 'name': cat.replace('_', ' ')} for cat in sebi_categories]
+        categories = [{'id': cat.replace(' ', '_'), 'name': cat.replace(
+            '_', ' ')} for cat in sebi_categories]
         return jsonify({
             'success': True,
             'categories': categories
@@ -594,6 +623,7 @@ def get_sebi_categories():
             'error': str(e)
         }), 500
 
+
 @app.route('/api/sebi/route', methods=['POST'])
 def route_sebi_issue():
     """Route SEBI-related issues"""
@@ -602,14 +632,14 @@ def route_sebi_issue():
         sebi_id = int(data.get('sebi_id'))
         issue_category = data.get('issue_category')
         severity = data.get('severity')
-        
+
         if sebi_data is None:
             if not load_sebi_data():
                 return jsonify({
                     'success': False,
                     'error': 'SEBI data not loaded'
                 }), 500
-            
+
         # Get entity data
         entity_data = sebi_data[sebi_data['SEBI_ID'] == sebi_id]
         if len(entity_data) == 0:
@@ -617,38 +647,45 @@ def route_sebi_issue():
                 'success': False,
                 'error': f"No SEBI entity found with ID {sebi_id}"
             }), 404
-            
+
         entity = entity_data.iloc[0]
-        
+
         # SEBI routing logic based on issue type and severity
         if issue_category in ['Compliance_Issues', 'Regulatory_Matters']:
             # Use contact person for regulatory issues
             contact_person = entity.get('Contact_Person', '')
             if contact_person and str(contact_person).strip():
                 contact_name = str(contact_person)
-                contact_email = entity.get('Email_1', '') or entity.get('Email_2', '')
-                contact_phone = entity.get('Telephone_1', '') or entity.get('Telephone_2', '')
+                contact_email = entity.get(
+                    'Email_1', '') or entity.get('Email_2', '')
+                contact_phone = entity.get(
+                    'Telephone_1', '') or entity.get('Telephone_2', '')
                 route_type = 'Compliance Contact'
             else:
                 contact_name = "General Contact"
-                contact_email = entity.get('Email_1', '') or entity.get('Email_2', '')
-                contact_phone = entity.get('Telephone_1', '') or entity.get('Telephone_2', '')
+                contact_email = entity.get(
+                    'Email_1', '') or entity.get('Email_2', '')
+                contact_phone = entity.get(
+                    'Telephone_1', '') or entity.get('Telephone_2', '')
                 route_type = 'General Contact'
         else:
             # For other issues, use available contact info
             contact_person = entity.get('Contact_Person', '')
-            contact_name = str(contact_person) if contact_person and str(contact_person).strip() else "General Contact"
-            contact_email = entity.get('Email_1', '') or entity.get('Email_2', '')
-            contact_phone = entity.get('Telephone_1', '') or entity.get('Telephone_2', '')
+            contact_name = str(contact_person) if contact_person and str(
+                contact_person).strip() else "General Contact"
+            contact_email = entity.get(
+                'Email_1', '') or entity.get('Email_2', '')
+            contact_phone = entity.get(
+                'Telephone_1', '') or entity.get('Telephone_2', '')
             route_type = 'Customer Service'
-        
+
         # Determine confidence based on data availability
         confidence = 70.0
         if contact_person and str(contact_person).strip() and contact_email:
             confidence = 90.0
         elif contact_email:
             confidence = 80.0
-            
+
         return jsonify({
             'success': True,
             'result': {
@@ -661,13 +698,14 @@ def route_sebi_issue():
                 'confidence': confidence
             }
         })
-        
+
     except Exception as e:
         app.logger.error(f"Error in SEBI routing: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
 
 @app.route('/api/sebi/states', methods=['GET'])
 def get_sebi_states():
@@ -679,15 +717,15 @@ def get_sebi_states():
                     'success': False,
                     'error': 'SEBI data not loaded'
                 }), 500
-            
+
         states = set()
         if 'State_1' in sebi_data.columns:
             states.update(sebi_data['State_1'].dropna().astype(str).unique())
         if 'State_2' in sebi_data.columns:
             states.update(sebi_data['State_2'].dropna().astype(str).unique())
-        
+
         states = sorted([s for s in states if s and s.strip() and s != 'nan'])
-        
+
         return jsonify({
             'success': True,
             'states': states
@@ -702,17 +740,21 @@ def get_sebi_states():
 # STATIC FILE SERVING (for React app)
 # ============================================================================
 
+
 @app.route('/')
 def serve_react():
+    """Serve the main React app"""
     return send_from_directory(app.static_folder, 'index.html')
+
 
 @app.route('/<path:path>')
 def serve_static(path):
-    # First check if it's an API route
+    """Serve static files or React app for client-side routing"""
+    # Skip API routes
     if path.startswith('api/'):
         return jsonify({'error': 'API endpoint not found'}), 404
-    
-    # Check if the file exists in the static folder
+
+    # Check if the file exists in the build folder
     if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     else:
@@ -722,12 +764,14 @@ def serve_static(path):
 # ERROR HANDLERS
 # ============================================================================
 
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({
         'success': False,
         'error': 'Endpoint not found'
     }), 404
+
 
 @app.errorhandler(500)
 def internal_error(error):
@@ -736,6 +780,7 @@ def internal_error(error):
         'success': False,
         'error': 'Internal server error'
     }), 500
+
 
 @app.errorhandler(400)
 def bad_request(error):
@@ -747,6 +792,7 @@ def bad_request(error):
 # ============================================================================
 # HEALTH CHECK
 # ============================================================================
+
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -765,18 +811,19 @@ def health_check():
 # MAIN
 # ============================================================================
 
+
 if __name__ == '__main__':
     # Load initial data
     app.logger.info("Starting application...")
     load_bank_data()
     load_sebi_data()
-    
+
     # Run the app
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    
+
     app.run(
-        debug=debug_mode, 
-        host='0.0.0.0', 
+        debug=debug_mode,
+        host='0.0.0.0',
         port=port
     )
