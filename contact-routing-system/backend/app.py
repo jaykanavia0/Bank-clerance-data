@@ -1,4 +1,4 @@
-# At the top of your backend/app.py file
+# Updated app.py for Render deployment
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import pandas as pd
@@ -7,33 +7,46 @@ import pickle
 import os
 import logging
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-# Configure app - Point to frontend build folder
+# Configure app - Point to frontend build folder (adjust path for backend directory)
 app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
 
-# CORS configuration - Update with your Render URL
+# CORS configuration - Updated for Render deployment
 CORS(app,
      origins=[
-         'https://your-app-name.onrender.com',  # Update this with your actual Render URL
-         'http://localhost:3000',               # For local React development
-         'http://localhost:5173'                # For Vite development server
+         'https://*.onrender.com',  # Allow all Render subdomains
+         'http://localhost:3000',   # For local React development
+         'http://localhost:5173',   # For Vite development server
+         'http://localhost:5000'    # For local Flask development
      ],
      supports_credentials=False)
 
-# Configure logging
-if not os.path.exists('logs'):
-    os.mkdir('logs')
+# Configure logging with better error handling
 
-file_handler = RotatingFileHandler(
-    'logs/app.log', maxBytes=10240, backupCount=10)
-file_handler.setFormatter(logging.Formatter(
-    '%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s'
-))
-file_handler.setLevel(logging.INFO)
-app.logger.addHandler(file_handler)
-app.logger.setLevel(logging.INFO)
-app.logger.info('Contact Routing System startup')
 
+def setup_logging():
+    """Setup logging with proper error handling"""
+    try:
+        if not os.path.exists('logs'):
+            os.makedirs('logs', exist_ok=True)
+
+        file_handler = RotatingFileHandler(
+            'logs/app.log', maxBytes=10240, backupCount=10)
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s'
+        ))
+        file_handler.setLevel(logging.INFO)
+        app.logger.addHandler(file_handler)
+        app.logger.setLevel(logging.INFO)
+        app.logger.info('Contact Routing System startup')
+    except Exception as e:
+        # If file logging fails, just use console logging
+        print(f"Warning: Could not setup file logging: {e}")
+        app.logger.setLevel(logging.INFO)
+
+
+setup_logging()
 
 # Global variables for model and data
 routing_model = None
@@ -69,42 +82,73 @@ numerical_cols = ['Time_Sensitivity', 'Complete_Levels_Count', 'Generic_Email_Co
                   'Email_Completeness', 'Phone_Completeness']
 
 
+def get_file_path(relative_path):
+    """Get absolute file path, checking multiple possible locations"""
+    # Try relative to current directory (when running from backend)
+    if os.path.exists(relative_path):
+        return relative_path
+
+    # Try relative to parent directory (when running from root)
+    parent_path = os.path.join('..', relative_path)
+    if os.path.exists(parent_path):
+        return parent_path
+
+    # Try without backend prefix (when running from root)
+    if relative_path.startswith('backend/'):
+        root_path = relative_path.replace('backend/', '')
+        if os.path.exists(root_path):
+            return root_path
+
+    # Return original path if not found
+    return relative_path
+
+
 def load_bank_data():
-    """Load bank model and data"""
+    """Load bank model and data with better error handling"""
     global routing_model, scaler, feature_columns, df_clean, routing_features
 
     try:
         app.logger.info("Loading bank model and data...")
 
-        # Check if files exist before loading
-        model_files = [
-            'models/routing_model.pkl',
-            'models/feature_scaler.pkl',
-            'models/feature_columns.pkl',
-            'data/df_clean.pkl',
-            'data/routing_features.pkl'
-        ]
+        # Define possible file locations (adjust for running from backend directory)
+        model_files = {
+            'routing_model.pkl': ['models/routing_model.pkl', '../models/routing_model.pkl'],
+            'feature_scaler.pkl': ['models/feature_scaler.pkl', '../models/feature_scaler.pkl'],
+            'feature_columns.pkl': ['models/feature_columns.pkl', '../models/feature_columns.pkl'],
+            'df_clean.pkl': ['data/df_clean.pkl', '../data/df_clean.pkl'],
+            'routing_features.pkl': ['data/routing_features.pkl', '../data/routing_features.pkl']
+        }
 
-        missing_files = [f for f in model_files if not os.path.exists(f)]
+        # Find existing files
+        file_paths = {}
+        missing_files = []
+
+        for file_key, possible_paths in model_files.items():
+            found = False
+            for path in possible_paths:
+                if os.path.exists(path):
+                    file_paths[file_key] = path
+                    found = True
+                    break
+            if not found:
+                missing_files.append(file_key)
+
         if missing_files:
             app.logger.warning(f"Missing bank data files: {missing_files}")
             return False
 
-        # Load the model
-        with open('models/routing_model.pkl', 'rb') as file:
+        # Load the files
+        with open(file_paths['routing_model.pkl'], 'rb') as file:
             routing_model = pickle.load(file)
 
-        # Load the scaler
-        with open('models/feature_scaler.pkl', 'rb') as file:
+        with open(file_paths['feature_scaler.pkl'], 'rb') as file:
             scaler = pickle.load(file)
 
-        # Load feature columns
-        with open('models/feature_columns.pkl', 'rb') as file:
+        with open(file_paths['feature_columns.pkl'], 'rb') as file:
             feature_columns = pickle.load(file)
 
-        # Load the cleaned data
-        df_clean = pd.read_pickle('data/df_clean.pkl')
-        routing_features = pd.read_pickle('data/routing_features.pkl')
+        df_clean = pd.read_pickle(file_paths['df_clean.pkl'])
+        routing_features = pd.read_pickle(file_paths['routing_features.pkl'])
 
         app.logger.info("Bank model and data loaded successfully")
         return True
@@ -115,27 +159,32 @@ def load_bank_data():
 
 
 def load_sebi_data():
-    """Load and process SEBI data"""
+    """Load and process SEBI data with better error handling"""
     global sebi_data
 
     try:
         app.logger.info("Loading SEBI data...")
 
-        # Check if SEBI data file exists
-        sebi_file = 'data/SEBI_DATA.xlsx'
-        if not os.path.exists(sebi_file):
-            # Try alternative paths
-            alt_paths = ['SEBI_DATA.xlsx',
-                         'SEBI DATA.xlsx', 'data/SEBI DATA.xlsx']
-            sebi_file = None
-            for path in alt_paths:
-                if os.path.exists(path):
-                    sebi_file = path
-                    break
+        # Check possible SEBI data file locations (adjust for backend directory)
+        possible_sebi_files = [
+            'data/SEBI_DATA.xlsx',
+            '../data/SEBI_DATA.xlsx',
+            'SEBI_DATA.xlsx',
+            '../SEBI_DATA.xlsx',
+            'SEBI DATA.xlsx',
+            '../SEBI DATA.xlsx'
+        ]
 
-            if not sebi_file:
-                app.logger.warning("SEBI data file not found")
-                return False
+        sebi_file = None
+        for path in possible_sebi_files:
+            if os.path.exists(path):
+                sebi_file = path
+                break
+
+        if not sebi_file:
+            app.logger.warning(
+                "SEBI data file not found in any expected location")
+            return False
 
         # Read the Excel file
         df = pd.read_excel(sebi_file, sheet_name=0, header=1)
@@ -186,24 +235,45 @@ def load_sebi_data():
         app.logger.error(f"Error loading SEBI data: {str(e)}")
         return False
 
-# Load data before first request
+
+# Initialize data loading flag
+data_loaded = False
 
 
 @app.before_request
 def load_all_data():
-    global routing_model, scaler, feature_columns, df_clean, routing_features, sebi_data
+    """Load data before first request only"""
+    global data_loaded, routing_model, scaler, feature_columns, df_clean, routing_features, sebi_data
 
-    # Load bank data if not already loaded
-    if routing_model is None:
-        load_bank_data()
+    if not data_loaded:
+        # Load bank data if not already loaded
+        if routing_model is None:
+            load_bank_data()
 
-    # Load SEBI data if not already loaded
-    if sebi_data is None:
-        load_sebi_data()
+        # Load SEBI data if not already loaded
+        if sebi_data is None:
+            load_sebi_data()
+
+        data_loaded = True
 
 # ============================================================================
 # GENERAL API ENDPOINTS
 # ============================================================================
+
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for monitoring"""
+    return jsonify({
+        'status': 'healthy',
+        'message': 'Bank Clearance API is running',
+        'services': {
+            'bank_data': df_clean is not None,
+            'sebi_data': sebi_data is not None,
+            'routing_model': routing_model is not None
+        },
+        'version': '1.0.0'
+    })
 
 
 @app.route('/api/test', methods=['GET'])
@@ -744,7 +814,13 @@ def get_sebi_states():
 @app.route('/')
 def serve_react():
     """Serve the main React app"""
-    return send_from_directory(app.static_folder, 'index.html')
+    try:
+        return send_from_directory(app.static_folder, 'index.html')
+    except FileNotFoundError:
+        return jsonify({
+            "error": "Frontend build not found",
+            "message": "Please run the build script first. Frontend files should be in frontend/build/"
+        }), 404
 
 
 @app.route('/<path:path>')
@@ -754,12 +830,20 @@ def serve_static(path):
     if path.startswith('api/'):
         return jsonify({'error': 'API endpoint not found'}), 404
 
-    # Check if the file exists in the build folder
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+    # Check if the file exists in the build folder (for static assets)
+    static_file_path = os.path.join(app.static_folder, path)
+    if os.path.exists(static_file_path) and os.path.isfile(static_file_path):
         return send_from_directory(app.static_folder, path)
-    else:
-        # For client-side routing, serve index.html
+
+    # For all other routes, serve index.html (React Router will handle it)
+    try:
         return send_from_directory(app.static_folder, 'index.html')
+    except FileNotFoundError:
+        return jsonify({
+            "error": "Frontend build not found",
+            "message": "Please run the build script first. Frontend files should be in frontend/build/"
+        }), 404
+
 # ============================================================================
 # ERROR HANDLERS
 # ============================================================================
@@ -767,14 +851,19 @@ def serve_static(path):
 
 @app.errorhandler(404)
 def not_found(error):
-    return jsonify({
-        'success': False,
-        'error': 'Endpoint not found'
-    }), 404
+    """Handle 404 errors"""
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'success': False,
+            'error': 'API endpoint not found'
+        }), 404
+    # For non-API routes, serve React app
+    return serve_react()
 
 
 @app.errorhandler(500)
 def internal_error(error):
+    """Handle 500 errors"""
     app.logger.error(f"Internal server error: {str(error)}")
     return jsonify({
         'success': False,
@@ -784,44 +873,108 @@ def internal_error(error):
 
 @app.errorhandler(400)
 def bad_request(error):
+    """Handle 400 errors"""
     return jsonify({
         'success': False,
         'error': 'Bad request'
     }), 400
 
 # ============================================================================
-# HEALTH CHECK
+# UTILITY FUNCTIONS
 # ============================================================================
 
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint for monitoring"""
-    return jsonify({
-        'status': 'healthy',
-        'services': {
-            'bank_data': df_clean is not None,
-            'sebi_data': sebi_data is not None,
-            'routing_model': routing_model is not None
-        },
-        'version': '1.0.0'
-    })
+def check_build_exists():
+    """Check if React build exists"""
+    build_path = Path(app.static_folder)
+    index_path = build_path / 'index.html'
+    return build_path.exists() and index_path.exists()
+
+
+def check_data_files():
+    """Check if required data files exist"""
+    status = {
+        'bank_model_files': False,
+        'sebi_data_file': False,
+        'build_folder': False
+    }
+
+    # Check bank model files (adjust for backend directory)
+    bank_files = ['models/routing_model.pkl', '../models/routing_model.pkl']
+    status['bank_model_files'] = any(os.path.exists(f) for f in bank_files)
+
+    # Check SEBI data (adjust for backend directory)
+    sebi_files = ['data/SEBI_DATA.xlsx', '../data/SEBI_DATA.xlsx',
+                  'SEBI_DATA.xlsx', '../SEBI_DATA.xlsx']
+    status['sebi_data_file'] = any(os.path.exists(f) for f in sebi_files)
+
+    # Check build folder
+    status['build_folder'] = check_build_exists()
+
+    return status
 
 # ============================================================================
-# MAIN
+# STARTUP CHECK (Updated for newer Flask versions)
 # ============================================================================
 
+
+def startup_check():
+    """Check if everything is set up correctly on startup"""
+    print("=" * 50)
+    print("BANK CLEARANCE SYSTEM STARTUP")
+    print("=" * 50)
+
+    # Check file status
+    file_status = check_data_files()
+
+    print(f"Build folder exists: {file_status['build_folder']}")
+    print(f"Bank model files: {file_status['bank_model_files']}")
+    print(f"SEBI data file: {file_status['sebi_data_file']}")
+
+    if not file_status['build_folder']:
+        print("WARNING: React build not found. Run './build.sh' first.")
+
+    if not file_status['bank_model_files']:
+        print("WARNING: Bank model files not found. Bank routing may not work.")
+
+    if not file_status['sebi_data_file']:
+        print("WARNING: SEBI data file not found. SEBI routing may not work.")
+
+    print("Flask app started successfully!")
+    print("=" * 50)
+
+
+# Call startup check when module loads (instead of @app.before_first_request)
+startup_check()
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
 
 if __name__ == '__main__':
-    # Load initial data
-    app.logger.info("Starting application...")
-    load_bank_data()
-    load_sebi_data()
+    # Print startup information
+    print("Starting Bank Clearance Contact Routing System...")
 
-    # Run the app
+    # Load initial data
+    app.logger.info("Loading initial data...")
+    bank_data_loaded = load_bank_data()
+    sebi_data_loaded = load_sebi_data()
+
+    print(f"Bank data loaded: {bank_data_loaded}")
+    print(f"SEBI data loaded: {sebi_data_loaded}")
+
+    # Get port from environment variable (Render will set this)
     port = int(os.environ.get('PORT', 5000))
+
+    # Check if we're in development or production
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
 
+    print(f"Starting Flask app on port {port}")
+    print(f"Debug mode: {debug_mode}")
+    print(f"Static folder: {app.static_folder}")
+    print(f"Build exists: {check_build_exists()}")
+
+    # Run the app
     app.run(
         debug=debug_mode,
         host='0.0.0.0',

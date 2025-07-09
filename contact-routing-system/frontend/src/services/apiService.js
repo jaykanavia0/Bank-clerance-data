@@ -1,14 +1,15 @@
 import axios from 'axios';
 
 // API URL configuration for single service deployment
-const API_URL = import.meta.env.VITE_API_URL || '';
+// Updated to use your deployed backend
+const API_URL = import.meta.env.VITE_API_URL || 'https://clerancebank.onrender.com';
 
 const apiClient = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000, // Increased timeout for deployment
+  timeout: 30000, // Increased timeout for Render (can be slower than localhost)
 });
 
 // Response Interceptor with minimal error exposure
@@ -159,9 +160,9 @@ const apiService = {
     return apiClient.get('/api/test');
   },
 
-  // Health check
+  // Health check - Fixed endpoint path
   healthCheck: () => {
-    return apiClient.get('/health');
+    return apiClient.get('/api/health');
   },
 
   // Connection test with retry logic

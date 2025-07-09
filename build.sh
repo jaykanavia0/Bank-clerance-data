@@ -1,20 +1,23 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-echo "Starting build process for contact-routing-system..."
+# Exit on error
+set -e
 
-# Build React frontend
-echo "Building React frontend..."
-cd frontend
-echo "Installing frontend dependencies..."
-npm install
-echo "Building React app..."
-npm run build
-cd ..
+echo "Starting build process..."
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
-pip install -r backend/requirements.txt
+pip install -r requirements.txt
 
-echo "Build complete!"
-echo "React build created in frontend/build/"
-echo "Python dependencies installed"
+# Install Node.js dependencies and build frontend
+echo "Installing Node.js dependencies..."
+cd frontend
+npm install
+
+echo "Building React frontend..."
+npm run build
+
+# Go back to root
+cd ..
+
+echo "Build completed successfully!"
